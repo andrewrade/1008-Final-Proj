@@ -14,31 +14,6 @@ def build_mlp(layers_dims: List[int]):
     layers.append(nn.Linear(layers_dims[-2], layers_dims[-1]))
     return nn.Sequential(*layers)
 
-
-class MockModel(torch.nn.Module):
-    """
-    Does nothing. Just for testing.
-    """
-
-    def __init__(self, device="cuda", bs=64, n_steps=17, output_dim=256):
-        super().__init__()
-        self.device = device
-        self.bs = bs
-        self.n_steps = n_steps
-        self.repr_dim = 256
-
-    def forward(self, states, actions):
-        """
-        Args:
-            states: [B, T, Ch, H, W]
-            actions: [B, T-1, 2]
-
-        Output:
-            predictions: [B, T, D]
-        """
-        return torch.randn((self.bs, self.n_steps, self.repr_dim)).to(self.device)
-
-
 class Prober(torch.nn.Module):
     def __init__(
         self,
@@ -63,3 +38,138 @@ class Prober(torch.nn.Module):
     def forward(self, e):
         output = self.prober(e)
         return output
+
+####################################################################################
+#                                      ENCODER                                     #
+####################################################################################
+class ResidualLayer(torch.nn.Module):
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+
+        self.ConvBlock = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1), 
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels)
+        )
+        # 1 x 1 Convolution for Residual whenever downsmapling (stride > 1)
+        self.downsample_residual = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample_residual = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm2d(out_channels)
+            )
+    
+    def forward(self, x):
+        residual = x
+        if self.downsample_residual is not None:
+            residual = self.downsample_residual(x)
+        x = self.ConvBlock(x)
+        return (F.relu(x + residual))
+
+
+class EncoderBackbone(torch.nn.Module):
+
+    def __init__(self, n_kernels):
+        super().__init__()
+        self.n_kernels = n_kernels
+       
+        # 2 x 64 x 64 --> n_kernels x 32 x 32
+        self.ConvLayer1 = nn.Sequential(
+            nn.Conv2d(2, self.n_kernels, kernel_size=3, padding=1), 
+            nn.BatchNorm2d(self.n_kernels),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2) # n_kernels x 32 x 32
+        )
+        # n_kernels x 32 x 32 --> n_kernels x 32 x 32
+        self.ResBlock1 = nn.Sequential(
+            ResidualLayer(n_kernels, n_kernels),
+            ResidualLayer(n_kernels, n_kernels)
+        )
+        # n_kernels x 32 x 32 --> n_kernels * 2 x 16 x 16
+        self.ResBlock2 = nn.Sequential(
+            ResidualLayer(n_kernels, n_kernels*2, stride=2),
+            ResidualLayer(n_kernels*2, n_kernels*2)
+        )
+        # n_kernels * 2 x 16 x 16 --> n_kernels * 4 x 8 x 8
+        self.ResBlock3 = nn.Sequential(
+            ResidualLayer(n_kernels*2, n_kernels*4, stride=2),
+            ResidualLayer(n_kernels*4, n_kernels*4)
+        )
+        # n_kernels * 4 x 8 x 8 --> n_kernels * 8 x 4 x 4
+        self.ResBlock4 = nn.Sequential(
+            ResidualLayer(n_kernels*4, n_kernels*8, stride=2),
+            ResidualLayer(n_kernels*8, n_kernels*8)
+        )
+
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2) # n_kernels * 8 x 1 x 1
+    
+    def forward(self, x):
+        x = self.ConvLayer1(x) # 64x64 -> 16x16
+        x = self.ResBlock1(x) # 16x16
+        x = self.ResBlock2(x) # 16x16 -> 8x8
+        x = self.ResBlock3(x) # 8x8 -> 4x4
+        x = self.ResBlock4(x) # 4x4
+        x = self.avgpool(x) # 4x4 -> 1x1
+        return torch.flatten(x, 1) # (batch_size, n_kernels * 8)
+
+
+class BarlowTwins(torch.nn.Module):
+
+    def __init__(self, batch_size, representation_size, projection_layers=3, lambd=5E-3):
+        super().__init__()
+        assert representation_size % 8 == 0, 'Representation Size should be multiple of 8'
+        
+        self.backbone = EncoderBackbone(n_kernels=representation_size // 8)
+        self.batch_size = batch_size
+        self.representation_size = representation_size
+        self.projection_layers = projection_layers
+        self.lambd = lambd
+
+        layer_sizes = [self.representation_size] + [self.representation_size * 4 for i in range(self.projection_layers)]
+        layers = []
+        for i in range(len(layer_sizes) - 2):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
+            layers.append(nn.BatchNorm1d(layer_sizes[i+1]))
+            layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
+        self.projector = nn.Sequential(*layers)
+        
+        self.batch_norm = nn.BatchNorm1d(layer_sizes[-1])
+    
+    def _off_diagonal(self, x):
+        # return a flattened view of the off-diagonal elements of a square matrix
+        n, m = x.shape
+        assert n == m, 'Square Matrix Expected, Rectangular Instead'
+        return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+
+    def forward(self, Y_a, Y_b=None):
+
+        if not self.training:
+            return self.backbone(Y_a)
+        
+        Z_a = self.projector(self.backbone(Y_a))
+        Z_b = self.projector(self.backbone(Y_b))
+
+        # Cross-Correlation Matrix
+        cc_mat = self.batch_norm(Z_a).T @ self.batch_norm(Z_b)
+        cc_mat.div_(self.batch_size)
+
+        diag = torch.diagonal(cc_mat).add_(-1).pow_(2).sum()
+        off_diag = self._off_diagonal(cc_mat).pow_(2).sum()
+
+        loss = diag + self.lambd * off_diag
+        return loss
+        
+
+
+
+
+
+
+
+ 
+        
+
