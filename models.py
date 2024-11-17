@@ -136,6 +136,8 @@ class BarlowTwins(torch.nn.Module):
             layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
         self.projector = nn.Sequential(*layers)
+
+        print(layers)
         
         self.batch_norm = nn.BatchNorm1d(layer_sizes[-1])
     
