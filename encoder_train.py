@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=128, help='Dimensionality of the representation')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--proj_lyrs', type=float, default=3, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
     return parser.parse_args()
@@ -81,8 +82,7 @@ def main():
     args = parse_args()
     device = get_device()
     data = load_train_data(device, batch_size=args.batch_size)
-    
-    enc = BarlowTwins(args.batch_size, args.repr_dim, args.lambd)
+    enc = BarlowTwins(args.batch_size, args.repr_dim, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
 
