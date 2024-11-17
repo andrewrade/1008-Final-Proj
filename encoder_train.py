@@ -3,6 +3,7 @@ import argparse
 
 from PIL import Image
 import torch
+import torch.functional as F
 from torchvision import transforms
 
 from dataset import create_wall_dataloader
@@ -40,16 +41,17 @@ def load_train_data(device, batch_size):
 
 
 def augment_data(imgs):
-    # Normalize by Mean / Std in training data
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    train_transforms = transforms.Compose([
-                                    transforms.RandomHorizontalFlip(),
-                                    transforms.RandomRotation(90, interpolation=Image.BILINEAR),
-                                    transforms.GaussianBlur(7, sigma=(0.1, 1.0)),
-                                    transforms.ToTensor(),  # convert PIL to Pytorch Tensor
-                                    normalize,
-                                ])
-    return torch.stack([train_transforms(img) for img in imgs])
+    
+    def augment(img):
+        if torch.rand(1).item() > 0.5:
+            img = F.hflip(img)
+        angle = torch.randint(-90, 90, (1,)).item()
+        img = F.rotate(img, angle, interpolation=F.InterpolationMode.BILINEAR)
+        # Normalize (mean and std for standard datasets)
+        img = F.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        return img
+    
+    return torch.stack([augment(img) for img in imgs])
 
 def train(model, data, device, epochs, base_lr):
     
