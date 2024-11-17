@@ -56,7 +56,7 @@ def train(model, data, device, epochs, base_lr):
     model.to(device)
     model.train()
 
-    optimizer = torch.optim.Adamw(model.parameters(), lr=base_lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=base_lr)
     lr_schedule = torch.optim.CosineAnnealingLR(optimizer, T_max=epochs)
         
     for epoch in tqdm(range(epochs)):
