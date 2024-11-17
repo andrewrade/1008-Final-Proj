@@ -136,9 +136,7 @@ class BarlowTwins(torch.nn.Module):
             layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
         self.projector = nn.Sequential(*layers)
-
-        print(layers)
-        
+       
         self.batch_norm = nn.BatchNorm1d(layer_sizes[-1])
     
     def _off_diagonal(self, x):
@@ -152,8 +150,10 @@ class BarlowTwins(torch.nn.Module):
         if not self.training:
             return self.backbone(Y_a)
         
-        Z_a = self.projector(self.backbone(Y_a))
-        Z_b = self.projector(self.backbone(Y_b))
+        Z_a = self.backbone(Y_a)
+        Z_b = self.backbone(Y_b)
+        #Z_a = self.projector(self.backbone(Y_a))
+        #Z_b = self.projector(self.backbone(Y_b))
 
         print(f'Z_a size: {Z_a.size()}')
         print(f'Z_b size: {Z_a.size()}')
