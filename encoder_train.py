@@ -8,6 +8,14 @@ from dataset import create_wall_dataloader
 from configs import ConfigBase
 from models import BarlowTwins
 
+@dataclass
+class EncoderConfig(ConfigBase):
+    epochs: int = 100
+    batch_size: int = 64
+    repr_dim: int = 128
+    base_lr: float = 1E-3
+    lambd: float = 5E-3
+
 def get_device():
     """Check for GPU availability."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,13 +34,6 @@ def load_train_data(device, batch_size):
     )
     return train_ds
 
-@dataclass
-class EncoderConfig(ConfigBase):
-    epochs: int = 100
-    batch_size: int = 64
-    repr_dim: int = 128
-    base_lr: float = 1E-3
-    lambd: float = 5E-3
 
 def augment_data(imgs):
     # Normalize by Mean / Std in training data
@@ -77,10 +78,10 @@ def train(model, data, device, epochs, base_lr, optimizer):
 
 if __name__ == "__main__":
     
-    config = EncoderConfig.parse_from_command_line()
+    default_config = EncoderConfig()
     device = get_device()
     data = load_train_data(device, batch_size=256)
     
-    enc = BarlowTwins(config.batch_size, config.repr_dim, config.lambd)
-    encoder = train(enc, data, device, config.epochs, config.base_lr)
+    enc = BarlowTwins(default_config.batch_size, default_config.repr_dim, default_config.lambd)
+    encoder = train(enc, data, device, default_config.epochs, default_config.base_lr)
     encoder.save()
