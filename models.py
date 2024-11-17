@@ -104,7 +104,7 @@ class EncoderBackbone(torch.nn.Module):
             ResidualLayer(n_kernels*8, n_kernels*8)
         )
 
-        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2) # n_kernels * 8 x 1 x 1
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # n_kernels * 8 x 1 x 1
     
     def forward(self, x):
         x = self.ConvLayer1(x) # 64x64 -> 16x16
