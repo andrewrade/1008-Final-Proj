@@ -18,7 +18,7 @@ class ConfigBase:
 
     @classmethod
     def parse_from_command_line(cls):
-        return omegaconf_parse(cls)
+        return OmegaConf.omegaconf_parse(cls)
 
     @classmethod
     def parse_from_file(cls, path: str):
