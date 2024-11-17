@@ -1,4 +1,4 @@
-import tqdm 
+from tqdm import tqdm 
 import argparse
 
 from PIL import Image
