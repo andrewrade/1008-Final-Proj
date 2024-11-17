@@ -78,7 +78,7 @@ class EncoderBackbone(torch.nn.Module):
        
         # 2 x 64 x 64 --> n_kernels x 32 x 32
         self.ConvLayer1 = nn.Sequential(
-            nn.Conv2d(2, self.n_kernels, kernel_size=3, padding=1), 
+            nn.Conv2d(2, self.n_kernels, kernel_size=3), 
             nn.BatchNorm2d(self.n_kernels),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2) # n_kernels x 32 x 32
