@@ -118,17 +118,17 @@ class EncoderBackbone(torch.nn.Module):
 
 class BarlowTwins(torch.nn.Module):
 
-    def __init__(self, batch_size, representation_size, projection_layers=3, lambd=5E-3):
+    def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
-        assert representation_size % 8 == 0, 'Representation Size should be multiple of 8'
+        assert repr_dim % 8 == 0, 'Representation Size should be multiple of 8'
         
-        self.backbone = EncoderBackbone(n_kernels=representation_size // 8)
+        self.backbone = EncoderBackbone(n_kernels=repr_dim // 8)
         self.batch_size = batch_size
-        self.representation_size = representation_size
+        self.repr_dim = repr_dim
         self.projection_layers = projection_layers
         self.lambd = lambd
 
-        layer_sizes = [self.representation_size] + [self.representation_size * 4 for i in range(self.projection_layers)]
+        layer_sizes = [self.repr_dim] + [(self.repr_dim * 4) for _ in range(self.projection_layers)]
         layers = []
         for i in range(len(layer_sizes) - 2):
             layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
