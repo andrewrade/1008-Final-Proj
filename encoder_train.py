@@ -51,7 +51,7 @@ def augment_data(imgs):
                                 ])
     return torch.stack([train_transforms(img) for img in imgs])
 
-def train(model, data, device, epochs, base_lr, optimizer):
+def train(model, data, device, epochs, base_lr):
     
     model.to(device)
     model.train()
