@@ -44,14 +44,14 @@ def augment_data(imgs):
                                     transforms.ToTensor(),  # convert PIL to Pytorch Tensor
                                     normalize,
                                 ])
-    return train_transforms(imgs)
+    return torch.stack([train_transforms(img) for img in imgs])
 
 def train(model, data, device, epochs, base_lr, optimizer):
     
     model.to(device)
     model.train()
 
-    optimizer = torch.optim.Adamw(model.params(), lr=base_lr)
+    optimizer = torch.optim.Adamw(model.parameters(), lr=base_lr)
     lr_schedule = torch.optim.CosineAnnealingLR(optimizer, T_max=epochs)
         
     for epoch in tqdm(range(epochs)):
@@ -70,6 +70,8 @@ def train(model, data, device, epochs, base_lr, optimizer):
         
         print(f'Epoch {epoch} Avg Loss: {sum(losses) / len(losses):.3f}')
         lr_schedule.step()
+    
+    return model
 
 
 
