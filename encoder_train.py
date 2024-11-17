@@ -72,6 +72,9 @@ def train(model, data, device, epochs, base_lr):
 
             Y_b = augment_data(Y_a).to(device)
 
+            print(f'Y_a size: {Y_a.size()}')
+            print(f'Y_b size: {Y_a.size()}')
+
             loss = model(Y_a, Y_b)
             losses.append(loss)
             optimizer.zero_grad()

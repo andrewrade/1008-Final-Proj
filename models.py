@@ -153,6 +153,9 @@ class BarlowTwins(torch.nn.Module):
         Z_a = self.projector(self.backbone(Y_a))
         Z_b = self.projector(self.backbone(Y_b))
 
+        print(f'Z_a size: {Z_a.size()}')
+        print(f'Z_b size: {Z_a.size()}')
+
         # Cross-Correlation Matrix
         cc_mat = self.batch_norm(Z_a).T @ self.batch_norm(Z_b)
         cc_mat.div_(self.batch_size)
