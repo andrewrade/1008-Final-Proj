@@ -49,13 +49,7 @@ def augment_data(imgs):
                                     transforms.ToTensor(),  # convert PIL to Pytorch Tensor
                                     normalize,
                                 ])
-    # Check if imgs is a batch or single image
-    if len(imgs.shape) == 4:  # Batch of images
-        return torch.stack([train_transforms(Image.fromarray(img.numpy().transpose(1, 2, 0))) for img in imgs])
-    elif len(imgs.shape) == 3:  # Single image
-        return train_transforms(Image.fromarray(imgs.numpy().transpose(1, 2, 0)))
-    else:
-        raise ValueError(f"Unexpected tensor shape: {imgs.shape}")
+    return torch.stack([train_transforms(img) for img in imgs])
 
 def train(model, data, device, epochs, base_lr):
     
@@ -68,9 +62,9 @@ def train(model, data, device, epochs, base_lr):
     for epoch in tqdm(range(epochs)):
         losses = []
         for batch in data:
-
-            Y_a = batch
-            Y_b = augment_data(batch).to(device)
+            states = batch.states
+            Y_a = states
+            Y_b = augment_data(states).to(device)
 
             loss = model(Y_a, Y_b)
             losses.append(loss)
