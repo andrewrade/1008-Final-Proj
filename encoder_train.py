@@ -3,8 +3,7 @@ import argparse
 
 from PIL import Image
 import torch
-import torch.functional as F
-from torchvision import transforms
+from torchvision.transforms import functional as F
 
 from dataset import create_wall_dataloader
 from models import BarlowTwins
