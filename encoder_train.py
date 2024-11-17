@@ -1,20 +1,23 @@
 import tqdm 
+import argparse
+
 from PIL import Image
 import torch
 from torchvision import transforms
-from dataclasses import dataclass
 
 from dataset import create_wall_dataloader
-from configs import ConfigBase
 from models import BarlowTwins
 
-@dataclass
-class EncoderConfig(ConfigBase):
-    epochs: int = 100
-    batch_size: int = 64
-    repr_dim: int = 128
-    base_lr: float = 1E-3
-    lambd: float = 5E-3
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
+    parser.add_argument('--repr_dim', type=int, default=128, help='Dimensionality of the representation')
+    parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
+
+    return parser.parse_args()
 
 def get_device():
     """Check for GPU availability."""
@@ -74,14 +77,16 @@ def train(model, data, device, epochs, base_lr, optimizer):
     
     return model
 
+def main():
+    args = parse_args()
+    device = get_device()
+    data = load_train_data(device, batch_size=args.batch_size)
+    
+    enc = BarlowTwins(args.batch_size, args.repr_dim, args.lambd)
+    encoder = train(enc, data, device, args.epochs, args.base_lr)
+    torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
+
 
 
 if __name__ == "__main__":
-    
-    default_config = EncoderConfig()
-    device = get_device()
-    data = load_train_data(device, batch_size=256)
-    
-    enc = BarlowTwins(default_config.batch_size, default_config.repr_dim, default_config.lambd)
-    encoder = train(enc, data, device, default_config.epochs, default_config.base_lr)
-    encoder.save()
+    main()
