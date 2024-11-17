@@ -47,7 +47,7 @@ def augment_data(imgs):
         angle = torch.randint(-90, 90, (1,)).item()
         img = F.rotate(img, angle, interpolation=F.InterpolationMode.BILINEAR)
         # Normalize (mean and std for standard datasets)
-        img = F.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        img = F.normalize(img, mean=[0.456, 0.406], std=[0.224, 0.225])
         return img
     
     return torch.stack([augment(img) for img in imgs])
