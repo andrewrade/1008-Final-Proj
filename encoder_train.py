@@ -63,9 +63,14 @@ def train(model, data, device, epochs, base_lr):
     for epoch in tqdm(range(epochs)):
         losses = []
         for batch in data:
+            
             states = batch.states
+            
             Y_a = states
-            Y_b = augment_data(states).to(device)
+            batch_size, num_frames, channels, height, width = Y_a.shape
+            Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
+
+            Y_b = augment_data(Y_a).to(device)
 
             loss = model(Y_a, Y_b)
             losses.append(loss)
