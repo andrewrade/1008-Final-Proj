@@ -56,11 +56,14 @@ class SelfAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
       
     def forward(self, x):
+        
         m_batchsize, C, width , height = x.size()
         proj_query  = self.q_conv(x).view(m_batchsize,-1,width*height).permute(0,2,1) # B X CX(N)
         proj_key =  self.k_conv(x).view(m_batchsize,-1,width*height) # B X C x (*W*H)
         energy =  torch.bmm(proj_query,proj_key) # transpose check
-        attention = self.softmax(energy / torch.sqrt(C)) # BX (N) X (N) 
+
+        # Scale Attn Weights by Channel Depth (embedding dimension)
+        attention = self.softmax(energy / torch.sqrt(torch.tensor(C))) # BX (N) X (N) 
         proj_value = self.v_conv(x).view(m_batchsize,-1,width*height) # B X C X N
 
         out = torch.bmm(proj_value,attention.permute(0,2,1) )
@@ -102,19 +105,13 @@ class EncoderBackbone(nn.Module):
     def __init__(self, n_kernels):
         super().__init__()
         self.n_kernels = n_kernels
-       
         # 2 x 64 x 64 --> n_kernels x 32 x 32
         self.ConvLayer1 = nn.Sequential(
             nn.Conv2d(2, self.n_kernels, kernel_size=3, padding=1), 
             nn.BatchNorm2d(self.n_kernels),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-        self.SelfAttn1 = SelfAttention(
-            n_channels=n_kernels,
-            n_heads=2
-        )
-        self.Bn1 = nn.BatchNorm2d(self.n_kernels)
+        )        
         
         # n_kernels x 32 x 32 --> n_kernels * 4 x 8 x 8
         self.ResBlock1 = nn.Sequential(
@@ -122,28 +119,29 @@ class EncoderBackbone(nn.Module):
             ResidualLayer(self.n_kernels*4, self.n_kernels*8),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )
-        self.SelfAttn2 = SelfAttention(
+        self.SelfAttn1 = SelfAttention(
             n_channels=self.n_kernels*8,
-            n_heads=8
+            n_heads=2 # 1 Head per 32 channels
         )
-        self.Bn2 = nn.BatchNorm2d(self.n_kernels*8)
+        self.Bn1 = nn.BatchNorm2d(self.n_kernels*8)
         
         # n_kernels * 2 x 8 x 8 --> n_kernels * 16 x 4 x 4
         self.ResBlock2 = nn.Sequential(
             ResidualLayer(self.n_kernels*8, self.n_kernels*16, stride=2),
             ResidualLayer(self.n_kernels*16, self.n_kernels*32),
         )
-        self.SelfAttn3 = SelfAttention(
+        self.SelfAttn2 = SelfAttention(
             n_channels=self.n_kernels*32,
-            n_heads=8
+            n_heads=8 # 1 Head per 32 channels
         )
-        self.Bn3 = nn.BatchNorm2d(self.n_kernels*32)
+        self.Bn2 = nn.BatchNorm2d(self.n_kernels*32)
+        
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # n_kernels * 16 x 1 x 1
     
     def forward(self, x):
-        x = self.Bn1(self.SelfAttn1(self.ConvLayer1(x))) # 64x64 -> 32x32
-        x = self.Bn2(self.SelfAttn2(self.ResBlock1(x))) # 32x32 -> 16x16
-        x = self.Bn3(self.SelfAttn3(self.ResBlock2(x))) # 16x16 -> 8x8
+        x = self.ConvLayer1(x) # 64x64 -> 32x32
+        x = self.Bn1(self.SelfAttn1(self.ResBlock1(x))) # 32x32 -> 16x16
+        x = self.Bn2(self.SelfAttn2(self.ResBlock2(x))) # 16x16 -> 8x8
         x = self.avgpool(x) # 8x8 -> 1x1
         return torch.flatten(x, 1) # (batch_size, n_kernels * 16)
 
