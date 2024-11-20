@@ -42,7 +42,34 @@ class Prober(torch.nn.Module):
 ####################################################################################
 #                                      ENCODER                                     #
 ####################################################################################
-class ResidualLayer(torch.nn.Module):
+
+class SelfAttention(nn.Module):
+    
+    def __init__(self, n_channels, n_heads):
+        super(SelfAttention, self).__init__()
+        self.n_channels = n_channels
+        self.n_heads = n_heads
+        self.q_conv = nn.Conv2d(in_channels=n_channels, out_channels = n_channels // n_heads, kernel_size=1)
+        self.k_conv = nn.Conv2d(in_channels=n_channels, out_channels = n_channels // n_heads, kernel_size=1)
+        self.v_conv = nn.Conv2d(in_channels=n_channels, out_channels = n_channels, kernel_size=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.softmax = nn.Softmax(dim=-1)
+      
+    def forward(self, x):
+        m_batchsize, C, width , height = x.size()
+        proj_query  = self.q_conv(x).view(m_batchsize,-1,width*height).permute(0,2,1) # B X CX(N)
+        proj_key =  self.k_conv(x).view(m_batchsize,-1,width*height) # B X C x (*W*H)
+        energy =  torch.bmm(proj_query,proj_key) # transpose check
+        attention = self.softmax(energy / torch.sqrt(C)) # BX (N) X (N) 
+        proj_value = self.v_conv(x).view(m_batchsize,-1,width*height) # B X C X N
+
+        out = torch.bmm(proj_value,attention.permute(0,2,1) )
+        out = out.view(m_batchsize,C,width,height)
+        
+        out = self.gamma*out + x
+        return out
+
+class ResidualLayer(nn.Module):
 
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
@@ -70,7 +97,7 @@ class ResidualLayer(torch.nn.Module):
         return (F.relu(x + residual))
 
 
-class EncoderBackbone(torch.nn.Module):
+class EncoderBackbone(nn.Module):
 
     def __init__(self, n_kernels):
         super().__init__()
@@ -78,51 +105,56 @@ class EncoderBackbone(torch.nn.Module):
        
         # 2 x 64 x 64 --> n_kernels x 32 x 32
         self.ConvLayer1 = nn.Sequential(
-            nn.Conv2d(2, self.n_kernels, kernel_size=3), 
+            nn.Conv2d(2, self.n_kernels, kernel_size=3, padding=1), 
             nn.BatchNorm2d(self.n_kernels),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2) # n_kernels x 32 x 32
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
-        # n_kernels x 32 x 32 --> n_kernels x 32 x 32
+        self.SelfAttn1 = SelfAttention(
+            n_channels=n_kernels,
+            n_heads=2
+        )
+        self.Bn1 = nn.BatchNorm2d(self.n_kernels)
+        
+        # n_kernels x 32 x 32 --> n_kernels * 4 x 8 x 8
         self.ResBlock1 = nn.Sequential(
-            ResidualLayer(n_kernels, n_kernels),
-            ResidualLayer(n_kernels, n_kernels)
+            ResidualLayer(self.n_kernels, self.n_kernels*4, stride=2),
+            ResidualLayer(self.n_kernels*4, self.n_kernels*8),
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
-        # n_kernels x 32 x 32 --> n_kernels * 2 x 16 x 16
+        self.SelfAttn2 = SelfAttention(
+            n_channels=self.n_kernels*8,
+            n_heads=8
+        )
+        self.Bn2 = nn.BatchNorm2d(self.n_kernels*8)
+        
+        # n_kernels * 2 x 8 x 8 --> n_kernels * 16 x 4 x 4
         self.ResBlock2 = nn.Sequential(
-            ResidualLayer(n_kernels, n_kernels*2, stride=2),
-            ResidualLayer(n_kernels*2, n_kernels*2)
+            ResidualLayer(self.n_kernels*8, self.n_kernels*16, stride=2),
+            ResidualLayer(self.n_kernels*16, self.n_kernels*32),
         )
-        # n_kernels * 2 x 16 x 16 --> n_kernels * 4 x 8 x 8
-        self.ResBlock3 = nn.Sequential(
-            ResidualLayer(n_kernels*2, n_kernels*4, stride=2),
-            ResidualLayer(n_kernels*4, n_kernels*4)
+        self.SelfAttn3 = SelfAttention(
+            n_channels=self.n_kernels*32,
+            n_heads=8
         )
-        # n_kernels * 4 x 8 x 8 --> n_kernels * 8 x 4 x 4
-        self.ResBlock4 = nn.Sequential(
-            ResidualLayer(n_kernels*4, n_kernels*8, stride=2),
-            ResidualLayer(n_kernels*8, n_kernels*8)
-        )
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # n_kernels * 8 x 1 x 1
+        self.Bn3 = nn.BatchNorm2d(self.n_kernels*32)
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # n_kernels * 16 x 1 x 1
     
     def forward(self, x):
-        x = self.ConvLayer1(x) # 64x64 -> 16x16
-        x = self.ResBlock1(x) # 16x16
-        x = self.ResBlock2(x) # 16x16 -> 8x8
-        x = self.ResBlock3(x) # 8x8 -> 4x4
-        x = self.ResBlock4(x) # 4x4
-        x = self.avgpool(x) # 4x4 -> 1x1
-        return torch.flatten(x, 1) # (batch_size, n_kernels * 8)
+        x = self.Bn1(self.SelfAttn1(self.ConvLayer1(x))) # 64x64 -> 32x32
+        x = self.Bn2(self.SelfAttn2(self.ResBlock1(x))) # 32x32 -> 16x16
+        x = self.Bn3(self.SelfAttn3(self.ResBlock2(x))) # 16x16 -> 8x8
+        x = self.avgpool(x) # 8x8 -> 1x1
+        return torch.flatten(x, 1) # (batch_size, n_kernels * 16)
 
 
-class BarlowTwins(torch.nn.Module):
+class BarlowTwins(nn.Module):
 
     def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
-        assert repr_dim % 8 == 0, 'Representation Size should be multiple of 8'
+        assert repr_dim % 32 == 0, 'Representation Size should be multiple of 32'
         
-        self.backbone = EncoderBackbone(n_kernels=repr_dim // 8)
+        self.backbone = EncoderBackbone(n_kernels=repr_dim // 32)
         self.batch_size = batch_size
         self.repr_dim = repr_dim
         self.projection_layers = projection_layers
