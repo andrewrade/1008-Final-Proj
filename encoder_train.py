@@ -60,9 +60,9 @@ def train(model, data, device, epochs, base_lr):
     optimizer = torch.optim.AdamW(model.parameters(), lr=base_lr)
     lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
         
-    for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(epochs), desc='Epoch'):
         losses = []
-        for batch in data:
+        for batch in tqdm(data, desc='Batch'):
             
             states = batch.states
             
