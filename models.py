@@ -293,8 +293,8 @@ class BarlowTwins(nn.Module):
         #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
         
         self.backbone = ViTBackbone(
-            image_size=64,
-            patch_size=3,
+            image_size=65,
+            patch_size=5,
             in_channels=2,
             embed_dim=repr_dim,
             num_heads=2,
