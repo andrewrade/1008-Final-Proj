@@ -343,6 +343,8 @@ class BarlowTwins(nn.Module):
         if not self.training:
             return self.backbone(Y_a)
         
+        print(self.backbone(Y_a).size())
+        
         Z_a = self.projector(self.backbone(Y_a))
         Z_b = self.projector(self.backbone(Y_b))
 
