@@ -77,7 +77,7 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
         epoch_loss = 0
         num_batches = 0
 
-        for batch in tqdm(data, desc='Epoch'):
+        for batch in tqdm(data, desc=f'Epoch {epoch}'):
             
             states = batch.states.to(device)
             states = normalizer.normalize_state(states)
