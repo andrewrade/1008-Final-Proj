@@ -327,8 +327,9 @@ class BarlowTwins(nn.Module):
         if not self.training:
             return self.backbone(Y_a)
         
-        Z_a = self.projector(self.backbone(Y_a))
-        Z_b = self.projector(self.backbone(Y_b))
+        # Flatten from [bs, num_patches, repr_dim] --> [bs, num_patches*repr_dim]
+        Z_a = self.projector(self.backbone(Y_a).flatten(1))
+        Z_b = self.projector(self.backbone(Y_b).flatten(1))
 
         # Cross-Correlation Matrix
         cc_mat = self.batch_norm(Z_a).T @ self.batch_norm(Z_b)
