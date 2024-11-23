@@ -261,9 +261,12 @@ class ViTBackbone(nn.Module):
 
         self.patch_embedding = PatchEmbedding(self.image_size, self.patch_size, self.in_channels, self.embed_dim)
         n_patches = (self.image_size // self.patch_size)**2
+
+        # Learnable Class Token
+        self.class_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim)) 
       
         # Learnable Position Embeddings 
-        self.position_encoding = nn.Parameter(torch.empty(1, n_patches, self.embed_dim))
+        self.position_encoding = nn.Parameter(torch.empty(1, n_patches + 1, self.embed_dim))
         nn.init.trunc_normal_(self.position_encoding, std=0.02)
         
         self.transformer_blocks = nn.ModuleList([
@@ -272,24 +275,40 @@ class ViTBackbone(nn.Module):
         ])
 
     def forward(self, x):
+        bs = x.shape[0]
         x = self.patch_embedding(x)
+
+        # Expan class tokens along batch dimension
+        class_token = self.class_token.expand(bs, -1, -1)
+        
+        # Concatenat class token to each embedding
+        x = torch.cat((class_token, x), dim=1)
+
         # Add positional encoding
         x += self.position_encoding
 
         for block in self.transformer_blocks:
             x = block(x)
 
-        return x
+        # Return class tokens as dense representation
+        embedding = x[:, 0, :]
+        return embedding
 
 
 class BarlowTwins(nn.Module):
 
-    def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
+    def __init__(self, batch_size, projection_layers=3, lambd=5E-3):
         super().__init__()
         #assert repr_dim % 16 == 0, 'Representation Size should be multiple of 16'
         #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
         patch_size = 5
         image_size = 65
+        repr_dim = (image_size // patch_size)**2
+        
+        self.batch_size = batch_size
+        self.repr_dim = repr_dim
+        self.projection_layers = projection_layers
+        self.lambd = lambd
 
         self.backbone = ViTBackbone(
             image_size=image_size,
@@ -302,14 +321,7 @@ class BarlowTwins(nn.Module):
             dropout=0.1,
         )
 
-        n_patches = (image_size // patch_size)**2
-        
-        self.batch_size = batch_size
-        self.repr_dim = repr_dim
-        self.projection_layers = projection_layers
-        self.lambd = lambd
-
-        layer_sizes = [n_patches * self.repr_dim] + [(self.repr_dim * 4) for _ in range(self.projection_layers)]
+        layer_sizes = [self.repr_dim] + [(self.repr_dim * 4) for _ in range(self.projection_layers)]
         layers = []
         for i in range(len(layer_sizes) - 2):
             layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
@@ -331,9 +343,8 @@ class BarlowTwins(nn.Module):
         if not self.training:
             return self.backbone(Y_a)
         
-        # Flatten from [bs, num_patches, repr_dim] --> [bs, num_patches*repr_dim]
-        Z_a = self.projector(self.backbone(Y_a).flatten(1))
-        Z_b = self.projector(self.backbone(Y_b).flatten(1))
+        Z_a = self.projector(self.backbone(Y_a))
+        Z_b = self.projector(self.backbone(Y_b))
 
         # Cross-Correlation Matrix
         cc_mat = self.batch_norm(Z_a).T @ self.batch_norm(Z_b)
