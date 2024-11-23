@@ -314,9 +314,9 @@ class BarlowTwins(nn.Module):
             image_size=image_size,
             patch_size=patch_size,
             in_channels=2,
-            embed_dim=repr_dim,
+            embed_dim=64,
             num_heads=2,
-            mlp_dim=repr_dim*4,
+            mlp_dim=64*4,
             num_layers=1,
             dropout=0.1,
         )
