@@ -64,11 +64,11 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, end_factor=1, total_iters=warmup_epochs)
     cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs-warmup_epochs)
     
-    lr_scheduler = torch.optim.lr_scheduler.SequentialLR([
+    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
         optimizer,
-        schedulers=[warmup_scheduler, cosine_scheduler],
-        milestones=[warmup_epochs]
-    ])
+        [warmup_scheduler, cosine_scheduler],
+        [warmup_epochs]
+    )
     
     best_loss = float('inf')
     losses = []
