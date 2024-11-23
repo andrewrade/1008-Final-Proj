@@ -1,12 +1,12 @@
-from tqdm import tqdm 
 import argparse
+from tqdm import tqdm 
 
-from PIL import Image
 import torch
 from torchvision.transforms import v2
 
 from dataset import create_wall_dataloader
 from models import BarlowTwins
+from normalizer import StateNormalizer
 
 
 def parse_args():
@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--proj_lyrs', type=float, default=3, help='Number of Projection Layers for Decoder')
+    parser.add_argument('--proj_lyrs', type=float, default=2, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
     return parser.parse_args()
@@ -44,13 +44,13 @@ def augment_data(imgs):
     transforms = v2.Compose([
         v2.RandomHorizontalFlip(0.5),
         v2.RandomVerticalFlip(0.5),
-        v2.RandomRotation(degrees=(0, 180)),
+        v2.RandomAffine(degrees=(0, 30), scale=(1, 0.9)),
         v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1)),
     ])
     
     return torch.stack([transforms(img) for img in imgs])
 
-def train(model, data, device, epochs, base_lr):
+def train(model, data, device, epochs, warmup_epochs, base_lr):
     """
     Encoder Pre-Training Loop
     """
@@ -59,13 +59,28 @@ def train(model, data, device, epochs, base_lr):
     model.train()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=base_lr)
-    lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-        
-    for epoch in tqdm(range(epochs), desc='Epoch'):
-        losses = []
-        for batch in tqdm(data, desc='Batch'):
+    
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, end_factor=1, total_iters=warmup_epochs)
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs-warmup_epochs)
+    
+    lr_scheduler = torch.optim.lr_scheduler.SequentialLR([
+        optimizer,
+        [warmup_scheduler, cosine_scheduler],
+        [warmup_epochs]
+    ])
+    
+    best_loss = float('inf')
+    losses = []
+    normalizer = StateNormalizer()
+
+    for epoch in tqdm(range(epochs)):
+        epoch_loss = 0
+        num_batches = 0
+
+        for batch in tqdm(data, desc=f'Epoch {epoch}'):
             
-            states = batch.states
+            states = batch.states.to(device)
+            states = normalizer.normalize_state(states)
             
             # Un-augmented Frames
             Y_a = states
@@ -73,21 +88,39 @@ def train(model, data, device, epochs, base_lr):
             Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
             
             # Shuffle Indices to prevent model from exploiting ordering
-            shuffled_idxs = torch.randperm(Y_a.size(0))
-            Y_a = Y_a[shuffled_idxs, :, :]
+            shuffled_idxs = torch.randperm(Y_a.size(0), device=device)
+            Y_a = Y_a[shuffled_idxs]
 
             # Augmented Frame for Loss
             Y_b = augment_data(Y_a).to(device)
 
+            # Forward pass
             loss = model(Y_a, Y_b)
-            losses.append(loss)
+            
+            # Backprop
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            epoch_loss += loss.item()
+            num_batches += 1
         
-        print(f'Epoch {epoch} Avg Loss: {sum(losses) / len(losses):.3f}')
-        lr_schedule.step()
-    
+        avg_loss = epoch_loss / num_batches
+        losses.append(avg_loss)
+        
+        print(f'Epoch {epoch} Avg Loss: {avg_loss:.3f}')
+        lr_scheduler.step()
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': best_loss,
+                'normalizer_state': normalizer.state_dict() if hasattr(normalizer, 'state_dict') else None
+            }, '/home/ad3254/checkpoints/best.pth')
+
     return model
 
 def main():
@@ -97,7 +130,7 @@ def main():
     enc = BarlowTwins(args.batch_size, args.repr_dim, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
-
+    
 
 
 if __name__ == "__main__":
