@@ -45,7 +45,7 @@ def augment_data(imgs):
     transforms = v2.Compose([
         v2.RandomHorizontalFlip(0.5),
         v2.RandomVerticalFlip(0.5),
-        v2.RandomAffine(degrees=(0, 30), scale=(1, 0.9)),
+        v2.RandomAffine(degrees=(0, 30), scale=(0.9, 1)),
         v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1)),
     ])
     
