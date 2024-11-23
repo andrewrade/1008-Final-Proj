@@ -291,8 +291,8 @@ class ViTBackbone(nn.Module):
             x = block(x)
 
         # Return class tokens as dense representation
-        embedding = x[:, 0, :]
-        return embedding
+        #embedding = x[:, 0, :]
+        return x #embedding
 
 
 class BarlowTwins(nn.Module):
