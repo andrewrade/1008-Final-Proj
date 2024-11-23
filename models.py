@@ -3,6 +3,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 import torch
+import math
 
 
 def build_mlp(layers_dims: List[int]):
@@ -43,7 +44,7 @@ class Prober(torch.nn.Module):
 #                                      ENCODER                                     #
 ####################################################################################
 
-class SelfAttention(nn.Module):
+class CNNSelfAttention(nn.Module):
     
     def __init__(self, n_channels, n_heads):
         super(SelfAttention, self).__init__()
@@ -100,59 +101,208 @@ class ResidualLayer(nn.Module):
         return (F.relu(x + residual))
 
 
-class EncoderBackbone(nn.Module):
+class CNNBackbone(nn.Module):
 
-    def __init__(self, n_kernels):
+    def __init__(self, n_kernels, repr_dim, dropout=0.1):
         super().__init__()
         self.n_kernels = n_kernels
-        # 2 x 64 x 64 --> n_kernels x 32 x 32
+        self.repr_dim = repr_dim
+        self.dropout = dropout
+        # 2 x 64 x 64 --> n_kernels x 64 x 64
         self.ConvLayer1 = nn.Sequential(
-            nn.Conv2d(2, self.n_kernels, kernel_size=3, padding=1), 
+            nn.Conv2d(2, self.n_kernels, kernel_size=3), 
             nn.BatchNorm2d(self.n_kernels),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2)
+            nn.ReLU(inplace=True)
         )        
         
-        # n_kernels x 32 x 32 --> n_kernels * 4 x 8 x 8
+        # n_kernels x 64 x 64 --> n_kernels * 4 x 16 x 16
         self.ResBlock1 = nn.Sequential(
-            ResidualLayer(self.n_kernels, self.n_kernels*4, stride=2),
-            ResidualLayer(self.n_kernels*4, self.n_kernels*8),
-            nn.MaxPool2d(kernel_size=2, stride=2)
+            ResidualLayer(self.n_kernels, self.n_kernels*2, stride=2),
+            ResidualLayer(self.n_kernels*2, self.n_kernels*4, stride=2),
         )
-        self.SelfAttn1 = SelfAttention(
-            n_channels=self.n_kernels*8,
+        self.SelfAttn1 = CNNSelfAttention(
+            n_channels=self.n_kernels*4,
             n_heads=2 # 1 Head per 32 channels
         )
-        self.Bn1 = nn.BatchNorm2d(self.n_kernels*8)
+        self.Bn1 = nn.BatchNorm2d(self.n_kernels*4)
         
-        # n_kernels * 2 x 8 x 8 --> n_kernels * 16 x 4 x 4
+        # n_kernels * 2 x 16 x 16 --> n_kernels * 16 x 4 x 4
         self.ResBlock2 = nn.Sequential(
+            ResidualLayer(self.n_kernels*4, self.n_kernels*8, stride=2),
             ResidualLayer(self.n_kernels*8, self.n_kernels*16, stride=2),
-            ResidualLayer(self.n_kernels*16, self.n_kernels*32),
         )
-        self.SelfAttn2 = SelfAttention(
-            n_channels=self.n_kernels*32,
-            n_heads=8 # 1 Head per 32 channels
+        self.SelfAttn2 = CNNSelfAttention(
+            n_channels=self.n_kernels*16,
+            n_heads=2 # 1 Head per 32 channels
         )
-        self.Bn2 = nn.BatchNorm2d(self.n_kernels*32)
-        
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) # n_kernels * 16 x 1 x 1
+        self.Bn2 = nn.BatchNorm2d(self.n_kernels*16)
+    
+        self.FC1 = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(in_features=self.n_kernels*16*4*4, out_features=self.repr_dim*2, bias=True),
+            nn.Dropout(p=self.dropout),
+            nn.ReLU(),
+            nn.Linear(in_features=self.repr_dim*2, out_features=self.repr_dim, bias=True)
+        )
     
     def forward(self, x):
         x = self.ConvLayer1(x) # 64x64 -> 32x32
         x = self.Bn1(self.SelfAttn1(self.ResBlock1(x))) # 32x32 -> 16x16
         x = self.Bn2(self.SelfAttn2(self.ResBlock2(x))) # 16x16 -> 8x8
-        x = self.avgpool(x) # 8x8 -> 1x1
-        return torch.flatten(x, 1) # (batch_size, n_kernels * 16)
+        x = self.FC1(x)
+        return x # (batch_size, n_kernels * 16)
+
+class PatchEmbedding(nn.Module):
+    
+    def __init__(self, image_size, patch_size, in_channels, embed_dim):
+      super().__init__()
+      self.image_size = image_size
+      self.patch_size = patch_size
+      self.in_channels = in_channels
+      self.embed_dim = embed_dim
+      
+      self.conv_proj = nn.Conv2d(
+        in_channels=self.in_channels, 
+        out_channels=embed_dim, 
+        kernel_size=self.patch_size, 
+        stride=self.patch_size
+      )
+
+    def forward(self, x):
+      bs, c, h, w = x.shape
+      n_patches = (h * w) // self.patch_size**2
+
+      x = self.conv_proj(x) # (bs, c, h, w) --> (bs, embed_size, n_h, n_w)
+      x = x.reshape(bs, self.embed_dim, n_patches) # (bs, embed_size, n_h, n_w) --> (bs, embed_size, n_patches)
+      x = x.permute(0, 2, 1) # (bs, embed_size, n_patches) --> (bs, n_patches, embed_size)
+      return x
+
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout):
+      super().__init__()
+      
+      self.embed_dim = embed_dim
+      self.num_heads = num_heads
+      self.head_dim = embed_dim // num_heads
+      self.dropout = dropout
+
+      # Create copies of input for each q, k, v weights
+      self.qkv = nn.Linear(embed_dim, embed_dim * 3) 
+      self.q_norm = nn.LayerNorm(self.head_dim)
+      self.k_norm = nn.LayerNorm(self.head_dim)
+
+      self.projection = nn.Linear(self.embed_dim, self.embed_dim)
+      self.projection_dropout = nn.Dropout(self.dropout)
+
+
+    def forward(self, x):
+      bs, n_patches, embed_size = x.shape
+
+      # Copies input embedding 3 times for q, k and v --> (Concat, bs, num_heads, n_patches, head_dim)
+      qkv = self.qkv(x).reshape(bs, n_patches, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+      # 3 x copies (bs, num_heads, n_patches, head_dim)
+      q, k, v = qkv.unbind(0)
+
+      q, k = self.q_norm(q), self.k_norm(k)
+
+      # Scaled Dot Product Attn (QK^T) / sqrt(d)
+      attn = q @ k.transpose(-2, -1) * math.sqrt(self.head_dim)**-1
+      attn = F.softmax(attn, dim=-1)
+
+      x = attn @ v
+      x = x.transpose(1, 2).reshape(bs, n_patches, embed_size)
+      x = self.projection(x)
+      x = self.projection_dropout(x)
+      return x
+    
+class TransformerBlock(nn.Module):
+    def __init__(self, embed_dim, num_heads, mlp_dim, dropout):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.mlp_dim = mlp_dim
+        self.dropout = dropout
+
+        self.layer_norm_1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm_2 = nn.LayerNorm(self.embed_dim)
+        
+        self.attention = MultiHeadSelfAttention(embed_dim=self.embed_dim, num_heads=self.num_heads, dropout=self.dropout)
+
+        self.ffn = nn.Sequential(
+            nn.Linear(self.embed_dim, mlp_dim),
+            nn.Dropout(self.dropout),
+            nn.GELU(),
+            nn.Linear(mlp_dim, embed_dim),
+            nn.Dropout(self.dropout)
+        )
+
+    def forward(self, x):
+        residual_1 = x
+        x = self.attention(x)
+        x = self.layer_norm_1(x) + residual_1
+
+        residual_2 = x
+        x = self.ffn(x)
+        x = self.layer_norm_2(x) + residual_2
+
+        return x  
+    
+class ViTBackbone(nn.Module):
+    def __init__(self, image_size, patch_size, in_channels, embed_dim, num_heads, mlp_dim, num_layers, dropout=0.1):
+        super().__init__()
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.in_channels = in_channels
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.mlp_dim = mlp_dim
+        self.num_layers = num_layers
+        self.dropout = dropout
+
+        self.patch_embedding = PatchEmbedding(self.image_size, self.patch_size, self.in_channels, self.embed_dim)
+        
+        n_patches = (self.image_size**2) // self.patch_size**2
+
+        # Learnable Class Token
+        self.class_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))        
+        # Learnable Position Embeddings (n_pathches + 1 for class token)
+        self.position_encoding = nn.Parameter(torch.empty(1, n_patches + 1, self.embed_dim))
+        nn.init.trunc_normal_(self.position_encoding, std=0.02)
+        
+        self.transformer_blocks = nn.ModuleList([
+            TransformerBlock(self.embed_dim, self.num_heads, self.mlp_dim, self.dropout)
+            for _ in range(self.num_layers)
+        ])
+
+    def forward(self, x):
+        x = self.patch_embedding(x)
+        # Add positional encoding
+        x += self.position_encoding
+
+        for block in self.transformer_blocks:
+            x = block(x)
+
+        return x
 
 
 class BarlowTwins(nn.Module):
 
     def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
-        assert repr_dim % 32 == 0, 'Representation Size should be multiple of 32'
+        #assert repr_dim % 16 == 0, 'Representation Size should be multiple of 16'
+        #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
         
-        self.backbone = EncoderBackbone(n_kernels=repr_dim // 32)
+        self.backbone = ViTBackbone(
+            image_size=64,
+            patch_size=3,
+            in_channels=2,
+            embed_dim=repr_dim,
+            num_heads=2,
+            mlp_dim=repr_dim*4,
+            num_layers=1,
+            dropout=0.1,
+        )
+        
         self.batch_size = batch_size
         self.repr_dim = repr_dim
         self.projection_layers = projection_layers

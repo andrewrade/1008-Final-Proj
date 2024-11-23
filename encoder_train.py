@@ -3,7 +3,7 @@ import argparse
 
 from PIL import Image
 import torch
-from torchvision.transforms import functional as F
+from torchvision.transforms import v2
 
 from dataset import create_wall_dataloader
 from models import BarlowTwins
@@ -12,8 +12,8 @@ from models import BarlowTwins
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
-    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
-    parser.add_argument('--repr_dim', type=int, default=128, help='Dimensionality of the representation')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=float, default=3, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
@@ -41,18 +41,19 @@ def load_train_data(device, batch_size):
 
 def augment_data(imgs):
     
-    def augment(img):
-        if torch.rand(1).item() > 0.5:
-            img = F.hflip(img)
-        angle = torch.randint(-90, 90, (1,)).item()
-        img = F.rotate(img, angle, interpolation=F.InterpolationMode.BILINEAR)
-        # Normalize (mean and std for standard datasets)
-        img = F.normalize(img, mean=[0.456, 0.406], std=[0.224, 0.225])
-        return img
+    transforms = v2.Compose([
+        v2.RandomHorizontalFlip(0.5),
+        v2.RandomVerticalFlip(0.5),
+        v2.RandomRotation(degrees=(0, 180)),
+        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1)),
+    ])
     
-    return torch.stack([augment(img) for img in imgs])
+    return torch.stack([transforms(img) for img in imgs])
 
 def train(model, data, device, epochs, base_lr):
+    """
+    Encoder Pre-Training Loop
+    """
     
     model.to(device)
     model.train()
@@ -66,10 +67,16 @@ def train(model, data, device, epochs, base_lr):
             
             states = batch.states
             
+            # Un-augmented Frames
             Y_a = states
             batch_size, num_frames, channels, height, width = Y_a.shape
             Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
+            
+            # Shuffle Indices to prevent model from exploiting ordering
+            shuffled_idxs = torch.randperm(Y_a.size(0))
+            Y_a = Y_a[shuffled_idxs, :, :]
 
+            # Augmented Frame for Loss
             Y_b = augment_data(Y_a).to(device)
 
             loss = model(Y_a, Y_b)
