@@ -12,6 +12,7 @@ from normalizer import StateNormalizer
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
+    parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of Warmup epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
