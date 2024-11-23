@@ -25,7 +25,8 @@ class StateNormalizer:
         self.state_mean = torch.tensor([2.37E-4, 9.316E-3])
         self.state_std = torch.tensor([8.225E-3, 6.9441E-2])
 
+        self.mean = self.state_mean.view(1, -1, 1, 1) 
+        self.std = self.state_std.view(1, -1, 1, 1) 
+
     def normalize_state(self, states):
-        return (
-            (states - self.state_mean.to(states.device)) / (self.state_std.to(self.state_std.device) + 1e-6)
-        )
+        return ((states - self.mean.to(states.device)) / (self.std.to(states.device) + 1e-6))
