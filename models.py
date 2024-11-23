@@ -260,13 +260,10 @@ class ViTBackbone(nn.Module):
         self.dropout = dropout
 
         self.patch_embedding = PatchEmbedding(self.image_size, self.patch_size, self.in_channels, self.embed_dim)
-        
         n_patches = (self.image_size // self.patch_size)**2
-
-        # Learnable Class Token
-        self.class_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))        
-        # Learnable Position Embeddings (n_pathches + 1 for class token)
-        self.position_encoding = nn.Parameter(torch.empty(1, n_patches + 1, self.embed_dim))
+      
+        # Learnable Position Embeddings 
+        self.position_encoding = nn.Parameter(torch.empty(1, n_patches, self.embed_dim))
         nn.init.trunc_normal_(self.position_encoding, std=0.02)
         
         self.transformer_blocks = nn.ModuleList([
@@ -277,7 +274,7 @@ class ViTBackbone(nn.Module):
     def forward(self, x):
         x = self.patch_embedding(x)
         # Add positional encoding
-        x += self.position_encoding.unsqueeze(0)
+        x += self.position_encoding
 
         for block in self.transformer_blocks:
             x = block(x)
