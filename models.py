@@ -278,17 +278,23 @@ class ViTBackbone(nn.Module):
         bs = x.shape[0]
         x = self.patch_embedding(x)
 
+        print(x.size())
+
         # Expan class tokens along batch dimension
         class_token = self.class_token.expand(bs, -1, -1)
         
         # Concatenat class token to each embedding
         x = torch.cat((class_token, x), dim=1)
 
+        print(x.size())
+
         # Add positional encoding
         x += self.position_encoding
 
         for block in self.transformer_blocks:
             x = block(x)
+            print(x.size())
+
 
         # Return class tokens as dense representation
         #embedding = x[:, 0, :]
