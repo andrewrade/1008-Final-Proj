@@ -66,8 +66,8 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
     
     lr_scheduler = torch.optim.lr_scheduler.SequentialLR([
         optimizer,
-        [warmup_scheduler, cosine_scheduler],
-        [warmup_epochs]
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_epochs]
     ])
     
     best_loss = float('inf')
