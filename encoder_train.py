@@ -5,7 +5,7 @@ import torch
 from torchvision.transforms import v2
 
 from dataset import create_wall_dataloader
-from models import BarlowTwins
+from models import BarlowTwins, ViTBackbone
 from normalizer import StateNormalizer
 
 
@@ -15,6 +15,8 @@ def parse_args():
     parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of warmup epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
+    parser.add_argument('--vit_blocks', type=int, default=2, help='Number of transformer blocks in backbone')
+    parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=float, default=2, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
@@ -109,7 +111,7 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
         avg_loss = epoch_loss / num_batches
         losses.append(avg_loss)
         
-        print(f'Epoch {epoch} Avg Loss: {avg_loss:.3f}')
+        print(f'\nEpoch {epoch} Avg Loss: {avg_loss:.3f}\n')
         lr_scheduler.step()
 
         if avg_loss < best_loss:
@@ -128,7 +130,19 @@ def main():
     args = parse_args()
     device = get_device()
     data = load_train_data(device, batch_size=args.batch_size)
-    enc = BarlowTwins(args.batch_size * 17, args.repr_dim, args.proj_lyrs, args.lambd)
+    
+    vit_backbone = ViTBackbone(
+            image_size=65,
+            patch_size=5,
+            in_channels=2,
+            embed_dim=args.repr_dim,
+            num_heads=args.repr_dim // 64,
+            mlp_dim=args.repr_dim*4,
+            num_layers=args.vit_blocks,
+            dropout=args.dropout,
+        )
+    
+    enc = BarlowTwins(vit_backbone, args.batch_size * 17, args.repr_dim, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     

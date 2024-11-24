@@ -297,7 +297,7 @@ class ViTBackbone(nn.Module):
 
 class BarlowTwins(nn.Module):
 
-    def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
+    def __init__(self, backbone, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
         #assert repr_dim % 16 == 0, 'Representation Size should be multiple of 16'
         #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
@@ -308,17 +308,7 @@ class BarlowTwins(nn.Module):
         self.repr_dim = repr_dim
         self.projection_layers = projection_layers
         self.lambd = lambd
-
-        self.backbone = ViTBackbone(
-            image_size=image_size,
-            patch_size=patch_size,
-            in_channels=2,
-            embed_dim=self.repr_dim,
-            num_heads=2,
-            mlp_dim=repr_dim*4,
-            num_layers=1,
-            dropout=0.1,
-        )
+        self.backbone = backbone
 
         layer_sizes = [self.repr_dim] + [(self.repr_dim * 4) for _ in range(self.projection_layers)]
         layers = []
