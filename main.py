@@ -1,7 +1,7 @@
 from dataset import create_wall_dataloader
 from evaluator import ProbingEvaluator
 import torch
-from models import MockModel
+from models import ViTBackbone, BarlowTwins
 import glob
 
 
@@ -44,7 +44,24 @@ def load_data(device):
 def load_model():
     """Load or initialize the model."""
     # TODO: Replace MockModel with your trained model
-    model = MockModel()
+    enc_path = r"/home/ad3254/checkpoints/best.pth"
+    state_dict = torch.load(enc_path)['model_state_dict']
+
+    # Define the ViT Backbone
+    backbone = ViTBackbone(
+        image_size=65,
+        patch_size=5,
+        in_channels=2,
+        embed_dim=256,
+        num_heads=4,
+        mlp_dim=1024,
+        num_layers=2,
+        dropout=0.1,
+    )
+
+    model = BarlowTwins(backbone=backbone, batch_size=64, repr_dim=256)
+    model.load_state_dict(state_dict, strict=True)
+    model.eval()
     return model
 
 
@@ -58,7 +75,6 @@ def evaluate_model(device, model, probe_train_ds, probe_val_ds):
     )
 
     prober = evaluator.train_pred_prober()
-
     avg_losses = evaluator.evaluate_all(prober=prober)
 
     for probe_attr, loss in avg_losses.items():

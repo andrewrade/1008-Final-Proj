@@ -14,7 +14,7 @@ from models import Prober, build_mlp
 from configs import ConfigBase
 
 from dataset import WallDataset
-from normalizer import Normalizer
+from normalizer import Normalizer, StateNormalizer
 
 
 @dataclass
@@ -108,11 +108,20 @@ class ProbingEvaluator:
             batch_size=batch_size,
         )
 
+        normalizer = StateNormalizer()
+
         for epoch in tqdm(range(epochs), desc=f"Probe prediction epochs"):
             for batch in tqdm(dataset, desc="Probe prediction step"):
+                
                 ################################################################################
                 # TODO: Forward pass through your model
-                pred_encs = model(states=batch.states, actions=batch.actions)
+                
+                #pred_encs = model(states=batch.states, actions=batch.actions)
+                states = normalizer.normalize_state(states)
+                batch_size, num_frames, channels, height, width = states.shape
+                states = states.view(batch_size * num_frames, channels, height, width)
+                pred_encs = model(states)
+                ################################################################################    
                 pred_encs = pred_encs.transpose(0, 1)  # # BS, T, D --> T, BS, D
 
                 # Make sure pred_encs has shape (T, BS, D) at this point
@@ -206,10 +215,18 @@ class ProbingEvaluator:
         probing_losses = []
         prober.eval()
 
+        normalizer = StateNormalizer()
+
         for idx, batch in enumerate(tqdm(val_ds, desc="Eval probe pred")):
             ################################################################################
             # TODO: Forward pass through your model
-            pred_encs = model(states=batch.states, actions=batch.actions)
+            
+            #pred_encs = model(states=batch.states, actions=batch.actions)
+            states = normalizer.normalize_state(states)
+            batch_size, num_frames, channels, height, width = states.shape
+            states = states.view(batch_size * num_frames, channels, height, width)
+            pred_encs = model(states)
+            
             # # BS, T, D --> T, BS, D
             pred_encs = pred_encs.transpose(0, 1)
 
