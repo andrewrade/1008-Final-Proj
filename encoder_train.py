@@ -14,6 +14,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
     parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of warmup epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=float, default=2, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')

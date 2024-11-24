@@ -291,19 +291,18 @@ class ViTBackbone(nn.Module):
             x = block(x)
 
         # Return class tokens as dense representation
-        embedding = x[:, :]
+        embedding = x[:, 0, :]
         return embedding
 
 
 class BarlowTwins(nn.Module):
 
-    def __init__(self, batch_size, projection_layers=3, lambd=5E-3):
+    def __init__(self, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
         #assert repr_dim % 16 == 0, 'Representation Size should be multiple of 16'
         #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
         patch_size = 5
         image_size = 65
-        repr_dim = (image_size // patch_size)**2
         
         self.batch_size = batch_size
         self.repr_dim = repr_dim
@@ -314,9 +313,9 @@ class BarlowTwins(nn.Module):
             image_size=image_size,
             patch_size=patch_size,
             in_channels=2,
-            embed_dim=64,
+            embed_dim=repr_dim,
             num_heads=2,
-            mlp_dim=64*4,
+            mlp_dim=repr_dim*4,
             num_layers=1,
             dropout=0.1,
         )
