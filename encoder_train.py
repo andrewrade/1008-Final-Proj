@@ -133,6 +133,5 @@ def main():
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     
 
-
 if __name__ == "__main__":
     main()
