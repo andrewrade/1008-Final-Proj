@@ -128,7 +128,7 @@ def main():
     args = parse_args()
     device = get_device()
     data = load_train_data(device, batch_size=args.batch_size)
-    enc = BarlowTwins(args.batch_size, args.proj_lyrs, args.lambd)
+    enc = BarlowTwins(args.batch_size, args.repr_dim, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     
