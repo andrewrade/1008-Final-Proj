@@ -291,7 +291,7 @@ class ViTBackbone(nn.Module):
             x = block(x)
 
         # Return class tokens as dense representation
-        embedding = x[:, 0]
+        embedding = x[:, :]
         return embedding
 
 
@@ -342,8 +342,6 @@ class BarlowTwins(nn.Module):
 
         if not self.training:
             return self.backbone(Y_a)
-        
-        print(self.backbone(Y_a).size())
         
         Z_a = self.projector(self.backbone(Y_a))
         Z_b = self.projector(self.backbone(Y_b))
