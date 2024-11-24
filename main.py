@@ -41,7 +41,7 @@ def load_data(device):
     return probe_train_ds, probe_val_ds
 
 
-def load_model():
+def load_model(device):
     """Load or initialize the model."""
     # TODO: Replace MockModel with your trained model
     enc_path = r"/home/ad3254/checkpoints/best.pth"
@@ -61,7 +61,7 @@ def load_model():
 
     model = BarlowTwins(backbone=backbone, batch_size=64, repr_dim=256)
     model.load_state_dict(state_dict, strict=True)
-    model.eval()
+    model.eval().to(device)
     return model
 
 
@@ -84,5 +84,5 @@ def evaluate_model(device, model, probe_train_ds, probe_val_ds):
 if __name__ == "__main__":
     device = get_device()
     probe_train_ds, probe_val_ds = load_data(device)
-    model = load_model()
+    model = load_model(device)
     evaluate_model(device, model, probe_train_ds, probe_val_ds)
