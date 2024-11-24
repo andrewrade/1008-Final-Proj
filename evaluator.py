@@ -122,6 +122,8 @@ class ProbingEvaluator:
                 batch_size, num_frames, channels, height, width = states.shape
                 states = states.view(batch_size * num_frames, channels, height, width)
                 pred_encs = model(states)
+
+                pred_encs = pred_encs.view(batch_size, num_frames, -1)
                 ################################################################################    
                 pred_encs = pred_encs.transpose(0, 1)  # # BS, T, D --> T, BS, D
 
@@ -228,7 +230,7 @@ class ProbingEvaluator:
             batch_size, num_frames, channels, height, width = states.shape
             states = states.view(batch_size * num_frames, channels, height, width)
             pred_encs = model(states)
-            
+            pred_encs = pred_encs.view(batch_size, num_frames, -1)
             # # BS, T, D --> T, BS, D
             pred_encs = pred_encs.transpose(0, 1)
 
