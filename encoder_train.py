@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument('--vit_blocks', type=int, default=2, help='Number of transformer blocks in backbone')
     parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
     parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--proj_lyrs', type=float, default=2, help='Number of Projection Layers for Decoder')
+    parser.add_argument('--proj_lyrs', type=int, default=2, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
     return parser.parse_args()
