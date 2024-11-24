@@ -225,7 +225,7 @@ class ProbingEvaluator:
             # TODO: Forward pass through your model
             
             #pred_encs = model(states=batch.states, actions=batch.actions)
-            states = batch.staes
+            states = batch.states
             states = normalizer.normalize_state(states)
             batch_size, num_frames, channels, height, width = states.shape
             states = states.view(batch_size * num_frames, channels, height, width)
