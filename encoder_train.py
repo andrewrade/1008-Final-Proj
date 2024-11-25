@@ -47,8 +47,8 @@ def augment_data(imgs):
     transforms = v2.Compose([
         v2.RandomHorizontalFlip(0.5),
         v2.RandomVerticalFlip(0.5),
-        v2.RandomAffine(degrees=(0, 10), scale=(0.9, 1)),
-        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1)),
+        v2.RandomRotation(10),
+        v2.GaussianBlur(kernel_size=5,sigma=(0.1, 2)),
     ])
     
     return torch.stack([transforms(img) for img in imgs])
@@ -91,8 +91,8 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
             Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
             
             # Shuffle Indices to prevent model from exploiting ordering
-            shuffled_idxs = torch.randperm(Y_a.size(0), device=device)
-            Y_a = Y_a[shuffled_idxs]
+            #shuffled_idxs = torch.randperm(Y_a.size(0), device=device)
+            #Y_a = Y_a[shuffled_idxs]
 
             # Augmented Frame for Loss
             Y_b = augment_data(Y_a).to(device)
