@@ -45,9 +45,10 @@ def load_train_data(device, batch_size):
 def augment_data(imgs):
     
     transforms = v2.Compose([
-        v2.RandomHorizontalFlip(0.5),
+        v2.RandomRotation(5),
         v2.RandomVerticalFlip(0.5),
-        v2.GaussianBlur(kernel_size=5,sigma=(0.1, 2)),
+        v2.RandomCrop(60),
+        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1))
     ])
     
     return torch.stack([transforms(img) for img in imgs])
