@@ -49,7 +49,8 @@ def augment_data(imgs):
         v2.RandomVerticalFlip(0.5),
         v2.RandomHorizontalFlip(0.5),
         v2.RandomCrop(60),
-        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1))
+        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1)),
+        v2.Resize(65)
     ])
     
     return torch.stack([transforms(img) for img in imgs])
