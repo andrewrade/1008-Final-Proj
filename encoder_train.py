@@ -13,12 +13,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
     parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of warmup epochs')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
-    parser.add_argument('--vit_blocks', type=int, default=2, help='Number of transformer blocks in backbone')
+    parser.add_argument('--vit_blocks', type=int, default=3, help='Number of transformer blocks in backbone')
     parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
-    parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--proj_lyrs', type=int, default=2, help='Number of Projection Layers for Decoder')
+    parser.add_argument('--base_lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--proj_lyrs', type=int, default=3, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
     return parser.parse_args()
@@ -45,8 +45,9 @@ def load_train_data(device, batch_size):
 def augment_data(imgs):
     
     transforms = v2.Compose([
-        v2.RandomRotation(5),
+        v2.RandomRotation(10),
         v2.RandomVerticalFlip(0.5),
+        v2.RandomHorizontalFlip(0.5),
         v2.RandomCrop(60),
         v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1))
     ])
