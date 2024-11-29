@@ -55,7 +55,7 @@ def load_model(device):
         embed_dim=256,
         num_heads=4,
         mlp_dim=1024,
-        num_layers=2,
+        num_layers=3,
         dropout=0.1,
     )
 

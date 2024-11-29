@@ -297,14 +297,9 @@ class ViTBackbone(nn.Module):
 
 class BarlowTwins(nn.Module):
 
-    def __init__(self, backbone, batch_size, repr_dim, projection_layers=3, lambd=5E-3):
+    def __init__(self, backbone, repr_dim, projection_layers=3, lambd=5E-3):
         super().__init__()
-        #assert repr_dim % 16 == 0, 'Representation Size should be multiple of 16'
-        #self.backbone = CNNBackbone(n_kernels=repr_dim // 32, repr_dim=repr_dim)
-        patch_size = 5
-        image_size = 65
-        
-        self.batch_size = batch_size
+
         self.repr_dim = repr_dim
         self.projection_layers = projection_layers
         self.lambd = lambd
@@ -316,10 +311,10 @@ class BarlowTwins(nn.Module):
             layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
             layers.append(nn.BatchNorm1d(layer_sizes[i+1]))
             layers.append(nn.ReLU(inplace=True))
-        layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1]))
+        layers.append(nn.Linear(layer_sizes[-2], layer_sizes[-1], bias=False))
         self.projector = nn.Sequential(*layers)
        
-        self.batch_norm = nn.BatchNorm1d(layer_sizes[-1])
+        self.batch_norm = nn.BatchNorm1d(layer_sizes[-1], affine=False)
     
     def _off_diagonal(self, x):
         # return a flattened view of the off-diagonal elements of a square matrix
