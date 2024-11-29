@@ -59,7 +59,7 @@ def load_model(device):
         dropout=0.1,
     )
 
-    model = BarlowTwins(backbone=backbone, batch_size=64, repr_dim=256)
+    model = BarlowTwins(backbone=backbone, repr_dim=256)
     model.load_state_dict(state_dict, strict=True)
     model.eval().to(device)
     return model
