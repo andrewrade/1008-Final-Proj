@@ -297,9 +297,10 @@ class ViTBackbone(nn.Module):
 
 class BarlowTwins(nn.Module):
 
-    def __init__(self, backbone, repr_dim, projection_layers=3, lambd=5E-3):
+    def __init__(self, backbone, repr_dim, batch_size=None, projection_layers=3, lambd=5E-3):
         super().__init__()
 
+        self.batch_size = batch_size
         self.repr_dim = repr_dim
         self.projection_layers = projection_layers
         self.lambd = lambd
