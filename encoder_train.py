@@ -11,15 +11,15 @@ from normalizer import StateNormalizer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs to train')
     parser.add_argument('--warmup_epochs', type=float, default=5, help='Number of warmup epochs')
-    parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=1044, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--vit_blocks', type=int, default=3, help='Number of transformer blocks in backbone')
     parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
-    parser.add_argument('--base_lr', type=float, default=5e-4, help='Learning rate')
+    parser.add_argument('--base_lr', type=float, default=3e-4, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=int, default=3, help='Number of Projection Layers for Decoder')
-    parser.add_argument('--lambd', type=float, default=8e-3, help='Lambda parameter for loss')
+    parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
     return parser.parse_args()
 
@@ -149,7 +149,7 @@ def main():
             dropout=args.dropout,
         )
     
-    enc = BarlowTwins(vit_backbone, args.batch_size, args.repr_dim, args.proj_lyrs, args.lambd)
+    enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     
