@@ -11,13 +11,13 @@ from normalizer import StateNormalizer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
-    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train')
     parser.add_argument('--warmup_epochs', type=float, default=5, help='Number of warmup epochs')
-    parser.add_argument('--batch_size', type=int, default=1044, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
     parser.add_argument('--vit_blocks', type=int, default=3, help='Number of transformer blocks in backbone')
     parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
-    parser.add_argument('--base_lr', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--base_lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=int, default=3, help='Number of Projection Layers for Decoder')
     parser.add_argument('--lambd', type=float, default=5e-3, help='Lambda parameter for loss')
 
@@ -48,9 +48,11 @@ def augment_data(imgs):
         v2.RandomRotation(10),
         v2.RandomVerticalFlip(0.5),
         v2.RandomHorizontalFlip(0.5),
-        v2.RandomCrop(58),
-        v2.GaussianBlur(kernel_size=3,sigma=(0.1, 2)),
-        v2.Resize(65)
+        v2.RandomResizeCrop(65, scale=(0.93, 1.)),
+        v2.RandomApply([
+            v2.GaussianBlur(kernel_size=3,sigma=(0.1, 2))
+        ], p=0.5),
+        v2.GaussianNoise()
     ])
     
     return torch.stack([transforms(img) for img in imgs])
@@ -92,15 +94,11 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
             batch_size, num_frames, channels, height, width = Y_a.shape
             
             # Subsample Images (lot of repetition w/in frames)
-            rand_idxs = torch.randint(0, num_frames, (batch_size, ))
-            Y_a = Y_a[torch.arange(batch_size), rand_idxs]
+            #rand_idxs = torch.randint(0, num_frames, (batch_size, ))
+            #Y_a = Y_a[torch.arange(batch_size), rand_idxs]
             
-            #Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
+            Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
             
-            # Shuffle Indices to prevent model from exploiting ordering
-            #shuffled_idxs = torch.randperm(Y_a.size(0), device=device)
-            #Y_a = Y_a[shuffled_idxs]
-
             # Augmented Frame for Loss
             Y_b = augment_data(Y_a).to(device)
 
@@ -149,7 +147,7 @@ def main():
             dropout=args.dropout,
         )
     
-    enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size, args.proj_lyrs, args.lambd)
+    enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size * 17, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     
