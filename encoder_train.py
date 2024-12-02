@@ -141,7 +141,7 @@ def main():
             dropout=args.dropout,
         )
     
-    enc = BarlowTwins(vit_backbone, args.batch_size * 17, args.repr_dim, args.proj_lyrs, args.lambd)
+    enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size * 17, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
     torch.save(encoder.state_dict(), '/home/ad3254/encoder_1.pth')
     
