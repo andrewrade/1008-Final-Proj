@@ -11,7 +11,7 @@ from normalizer import StateNormalizer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a Barlow Twins Encoder')
-    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
     parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of warmup epochs')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
@@ -54,7 +54,6 @@ def augment_data(imgs):
         ], p=0.5),
         v2.GaussianNoise()
     ])
-    
     return torch.stack([transforms(img) for img in imgs])
 
 def train(model, data, device, epochs, warmup_epochs, base_lr):
@@ -92,11 +91,6 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
             # Un-augmented Frames
             Y_a = states
             batch_size, num_frames, channels, height, width = Y_a.shape
-            
-            # Subsample Images (lot of repetition w/in frames)
-            #rand_idxs = torch.randint(0, num_frames, (batch_size, ))
-            #Y_a = Y_a[torch.arange(batch_size), rand_idxs]
-            
             Y_a = Y_a.view(batch_size * num_frames, channels, height, width)
             
             # Augmented Frame for Loss
@@ -127,7 +121,7 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': best_loss,
                 'normalizer_state': normalizer.state_dict() if hasattr(normalizer, 'state_dict') else None
-            }, '/home/ad3254/checkpoints/best.pth')
+            }, '/home/ad3254/checkpoints/best_1.pth')
 
     return model
 
@@ -147,9 +141,9 @@ def main():
             dropout=args.dropout,
         )
     
-    enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size * 17, args.proj_lyrs, args.lambd)
+    enc = BarlowTwins(vit_backbone, args.batch_size * 17, args.repr_dim, args.proj_lyrs, args.lambd)
     encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
-    torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
+    torch.save(encoder.state_dict(), '/home/ad3254/encoder_1.pth')
     
 
 if __name__ == "__main__":
