@@ -48,7 +48,7 @@ def augment_data(imgs):
         v2.RandomRotation(10),
         v2.RandomVerticalFlip(0.5),
         v2.RandomHorizontalFlip(0.5),
-        v2.RandomResizeCrop(65, scale=(0.93, 1.)),
+        v2.RandomResizedCrop(65, scale=(0.93, 1.)),
         v2.RandomApply([
             v2.GaussianBlur(kernel_size=3,sigma=(0.1, 2))
         ], p=0.5),
