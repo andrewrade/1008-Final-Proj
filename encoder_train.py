@@ -56,7 +56,7 @@ def augment_data(imgs):
     ])
     return torch.stack([transforms(img) for img in imgs])
 
-def train(model, data, device, epochs, warmup_epochs, base_lr):
+def train(model, data, device, epochs, warmup_epochs, base_lr, checkpoint_path=None):
     """
     Encoder Pre-Training Loop
     """
@@ -75,11 +75,29 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
         [warmup_epochs]
     )
     
+    start_epoch = 0 
     best_loss = float('inf')
     losses = []
     normalizer = StateNormalizer()
 
-    for epoch in tqdm(range(epochs)):
+    if checkpoint_path:
+        print(f"Resuming training from checkpoint: {checkpoint_path}")
+        
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+        best_loss = checkpoint['loss']
+        start_epoch = checkpoint['epoch'] + 1  # Resume from the next 
+        
+        # Advance scheduler to correct epoch
+        for _ in range(start_epoch):
+            lr_scheduler.step()
+        
+        if 'normalizer_state' in checkpoint and checkpoint['normalizer_state'] is not None:
+            normalizer.load_state_dict(checkpoint['normalizer_state'])
+
+    for epoch in tqdm(range(epochs), initial=start_epoch, total=epochs):
         epoch_loss = 0
         num_batches = 0
 
@@ -125,6 +143,7 @@ def train(model, data, device, epochs, warmup_epochs, base_lr):
 
     return model
 
+
 def main():
     args = parse_args()
     device = get_device()
@@ -142,7 +161,7 @@ def main():
         )
     
     enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size * 17, args.proj_lyrs, args.lambd)
-    encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
+    encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr, checkpoint_path='/home/ad3254/checkpoints/best_1.pth')
     torch.save(encoder.state_dict(), '/home/ad3254/encoder_1.pth')
     
 
