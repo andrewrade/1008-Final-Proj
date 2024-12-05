@@ -338,8 +338,7 @@ class BarlowTwins(nn.Module):
         diag = torch.diagonal(cc_mat).add_(-1).pow_(2).sum()
         off_diag = self._off_diagonal(cc_mat).pow_(2).sum()
 
-        loss = diag + self.lambd * off_diag
-        return loss
+        return diag, self.lambd * off_diag
         
 
 

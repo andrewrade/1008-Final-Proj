@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument('--warmup_epochs', type=float, default=3, help='Number of warmup epochs')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--repr_dim', type=int, default=256, help='Dimensionality of the representation')
-    parser.add_argument('--vit_blocks', type=int, default=3, help='Number of transformer blocks in backbone')
+    parser.add_argument('--vit_blocks', type=int, default=2, help='Number of transformer blocks in backbone')
     parser.add_argument('--dropout', type=int, default=0.1, help='ViT Dropout')
     parser.add_argument('--base_lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--proj_lyrs', type=int, default=3, help='Number of Projection Layers for Decoder')
@@ -48,11 +48,11 @@ def augment_data(imgs):
         v2.RandomRotation(10),
         v2.RandomVerticalFlip(0.5),
         v2.RandomHorizontalFlip(0.5),
-        v2.RandomResizedCrop(65, scale=(0.93, 1.)),
+        v2.RandomCrop(60),
         v2.RandomApply([
-            v2.GaussianBlur(kernel_size=3,sigma=(0.1, 2))
+            v2.GaussianBlur(kernel_size=3,sigma=(0.1, 1))
         ], p=0.5),
-        v2.GaussianNoise()
+        v2.Resize(65)
     ])
     return torch.stack([transforms(img) for img in imgs])
 
@@ -60,7 +60,6 @@ def train(model, data, device, epochs, warmup_epochs, base_lr, checkpoint_path=N
     """
     Encoder Pre-Training Loop
     """
-    
     model.to(device)
     model.train()
 
@@ -77,7 +76,7 @@ def train(model, data, device, epochs, warmup_epochs, base_lr, checkpoint_path=N
     
     start_epoch = 0 
     best_loss = float('inf')
-    losses = []
+    losses_off_diag = []
     normalizer = StateNormalizer()
 
     if checkpoint_path:
@@ -115,31 +114,35 @@ def train(model, data, device, epochs, warmup_epochs, base_lr, checkpoint_path=N
             Y_b = augment_data(Y_a).to(device)
 
             # Forward pass
-            loss = model(Y_a, Y_b)
+            loss_diag, loss_off_diag = model(Y_a, Y_b)
+            loss = loss_diag + loss_off_diag
             
             # Backprop
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            epoch_loss += loss.item()
+            epoch_diag_loss += loss_diag.item()
+            epoch_off_diag_loss += loss_off_diag.item()
             num_batches += 1
         
-        avg_loss = epoch_loss / num_batches
-        losses.append(avg_loss)
+        avg_diag_loss = epoch_diag_loss / num_batches
+        avg_off_diag_loss = epoch_off_diag_loss / num_batches
         
-        print(f'\nEpoch {epoch} Avg Loss: {avg_loss:.3f}\n')
+        losses_off_diag.append(avg_off_diag_loss)
+        
+        print(f'\nEpoch {epoch} Avg Diagonal Loss: {avg_diag_loss:.3f}, Avg Off Diagonal Loss: {avg_off_diag_loss:.3f}\n')
         lr_scheduler.step()
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
+        if avg_off_diag_loss < best_loss:
+            best_loss = avg_off_diag_loss
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': best_loss,
                 'normalizer_state': normalizer.state_dict() if hasattr(normalizer, 'state_dict') else None
-            }, '/home/ad3254/checkpoints/best_1.pth')
+            }, '/home/ad3254/checkpoints/best.pth')
 
     return model
 
@@ -161,8 +164,8 @@ def main():
         )
     
     enc = BarlowTwins(vit_backbone, args.repr_dim, args.batch_size * 17, args.proj_lyrs, args.lambd)
-    encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr, checkpoint_path='/home/ad3254/checkpoints/best_1.pth')
-    torch.save(encoder.state_dict(), '/home/ad3254/encoder_1.pth')
+    encoder = train(enc, data, device, args.epochs, args.warmup_epochs, args.base_lr)
+    torch.save(encoder.state_dict(), '/home/ad3254/encoder.pth')
     
 
 if __name__ == "__main__":
