@@ -97,7 +97,8 @@ def train(model, data, device, epochs, warmup_epochs, base_lr, checkpoint_path=N
             normalizer.load_state_dict(checkpoint['normalizer_state'])
 
     for epoch in tqdm(range(epochs), initial=start_epoch, total=epochs):
-        epoch_loss = 0
+        epoch_diag_loss = 0
+        epoch_off_diag_loss = 0
         num_batches = 0
 
         for batch in tqdm(data, desc=f'Epoch {epoch}'):
